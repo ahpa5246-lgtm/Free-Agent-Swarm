@@ -1,0 +1,457 @@
+{
+  "name": "Free Agent Swarm — Safe free-tier planning failover (manual setup)",
+  "nodes": [
+    {
+      "name": "Task Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        180,
+        300
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "free-agent-swarm-plan",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "task-webhook"
+    },
+    {
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body ?? {};\nconst task = typeof body.task === 'string' ? body.task.trim().slice(0,2000) : '';\nconst repository = typeof body.repository === 'string' ? body.repository.trim().slice(0,120) : '';\nif (!task || !/^[A-Za-z0-9_.-]+\\/[A-Za-z0-9_.-]+$/.test(repository)) {\n  return [{json:{ok:false,status:'rejected',error:'Valid task and owner/repository are required'}}];\n}\nreturn [{json:{ok:true,status:'validated',task,repository,mode:'planning-only',note:'No repository writes or code execution'}}];"
+      },
+      "id": "validate-input"
+    },
+    {
+      "name": "Input Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        620,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "input-ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "input-valid?"
+    },
+    {
+      "name": "OpenRouter Free",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        210
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:'openrouter/free', messages:[{role:'system',content:'Create a concise technical implementation plan, no invented test results or PR claims. Do not output secrets.'},{role:'user',content: $('Validate Input').first().json.task}],temperature:0.2,max_tokens:900}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "openrouter-free"
+    },
+    {
+      "name": "Check OpenRouter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1090,
+        210
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst valid = $('Validate Input').first().json;\nconst code = Number(input.statusCode ?? 0);\nconst body = input.body ?? {};\nconst completion = body?.choices?.[0]?.message?.content;\nif (code >= 200 && code < 300 && typeof completion === 'string' && completion.trim()) {\n return [{json:{ok:true,status:'planned',provider:'openrouter',repository:valid.repository,task:valid.task,proposal:completion.slice(0,12000),mode:'planning-only',handoff:false}}];\n}\nreturn [{json:{ok:false,status:'provider_error',provider:'openrouter',code,canFallback:[429,503].includes(code),error:'Provider response unusable',mode:'planning-only'}}];"
+      },
+      "id": "check-openrouter"
+    },
+    {
+      "name": "Plan Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1330,
+        210
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "ready",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "plan-ready?"
+    },
+    {
+      "name": "Can Fallback?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        350
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "fallback",
+              "leftValue": "={{ $json.canFallback }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "can-fallback?"
+    },
+    {
+      "name": "Groq Backup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        270
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({model:'openai/gpt-oss-120b',messages:[{role:'system',content:'Provide a concise implementation plan. Do not claim code changes or tests.'},{role:'user',content: $('Validate Input').first().json.task}],temperature:0.2,max_tokens:900}) }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "groq-backup"
+    },
+    {
+      "name": "Check Groq",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        270
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const result=$input.first().json;\nconst code=Number(result.statusCode??0);\nconst completion=result.body?.choices?.[0]?.message?.content;\nconst valid=$('Validate Input').first().json;\nif(code>=200 && code<300 && typeof completion==='string' && completion.trim()) {\n return [{json:{ok:true,status:'planned',provider:'groq',repository:valid.repository,task:valid.task,proposal:completion.slice(0,12000),mode:'planning-only',handoff:true}}];\n}\nreturn [{json:{ok:false,status:'blocked',code,reason:'No available authorized free-tier provider',handoff:true,mode:'planning-only'}}];"
+      },
+      "id": "check-groq"
+    },
+    {
+      "name": "Groq Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2150,
+        325
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "groq-ok",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        }
+      },
+      "id": "groq-success?"
+    },
+    {
+      "name": "Respond Result",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2210,
+        210
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "respond-result"
+    },
+    {
+      "name": "Respond Rejected",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        870,
+        500
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "respond-rejected"
+    },
+    {
+      "name": "Respond Blocked",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1770,
+        480
+      ],
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {
+          "responseCode": 503
+        }
+      },
+      "id": "respond-blocked"
+    }
+  ],
+  "connections": {
+    "Task Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Input Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Input Valid?": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter Free",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Free": {
+      "main": [
+        [
+          {
+            "node": "Check OpenRouter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check OpenRouter": {
+      "main": [
+        [
+          {
+            "node": "Plan Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Ready?": {
+      "main": [
+        [
+          {
+            "node": "Respond Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Can Fallback?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Fallback?": {
+      "main": [
+        [
+          {
+            "node": "Groq Backup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Backup": {
+      "main": [
+        [
+          {
+            "node": "Check Groq",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Groq": {
+      "main": [
+        [
+          {
+            "node": "Groq Success?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Success?": {
+      "main": [
+        [
+          {
+            "node": "Respond Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Blocked",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

@@ -1,0 +1,49 @@
+{
+  "name": "Free Agent Swarm — Zero-key offline simulation",
+  "nodes": [
+    {
+      "name": "When clicked",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ],
+      "parameters": {},
+      "id": "when-clicked"
+    },
+    {
+      "name": "Simulate Handoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        430,
+        300
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst task = 'Audit the sample repository and prepare a safe review plan';\nconst records = [\n  {stage:1,agent:'Codex',event:'Accepted mock task'},\n  {stage:2,agent:'Codex',event:'Simulated repo analysis finished'},\n  {stage:3,agent:'Codex',event:'Simulated quota exhausted (429)'},\n  {stage:4,agent:'DeepSeek',event:'Checkpoint handoff completed'},\n  {stage:5,agent:'DeepSeek',event:'Mock implementation notes prepared'},\n  {stage:6,agent:'Gemini',event:'Mock validation passed'},\n  {stage:7,agent:'Supervisor',event:'Awaiting human review (no PR created)'}\n];\nreturn [{json:{mode:'simulation',task,events:records,modelCalls:0,repositoryWrites:0,paidCalls:0}}];"
+      },
+      "id": "simulate-handoff"
+    }
+  ],
+  "connections": {
+    "When clicked": {
+      "main": [
+        [
+          {
+            "node": "Simulate Handoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

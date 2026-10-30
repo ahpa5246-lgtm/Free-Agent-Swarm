@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b101a" />
+  <meta name="description" content="Free Agent Swarm — a transparent, offline-first demo of multi-agent orchestration and safe quota failover." />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/src/styles.css" />
+  <title>Free Agent Swarm — Open-source agent orchestration</title>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <a class="brand" href="#overview" aria-label="Free Agent Swarm home">
+        <span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 44 44" fill="none"><path d="M22 5L38 14V30L22 39L6 30V14L22 5Z" stroke="currentColor" stroke-width="1.8"/><circle cx="22" cy="22" r="4.5" fill="currentColor"/><path d="M22 17.5V8M26 24L35 29M18 24L9 29" stroke="currentColor" stroke-width="2"/></svg></span>
+        <span><strong>FREE AGENT</strong><small>SWARM</small></span>
+      </a>
+      <div class="sidebar-group-label">WORKSPACE</div>
+      <nav class="nav-list" aria-label="Views">
+        <button class="nav-link active" type="button" data-view="overview"><span class="nav-icon">◈</span> Overview <span class="nav-bullet"></span></button>
+        <button class="nav-link" type="button" data-view="agents"><span class="nav-icon">⬡</span> Agent network</button>
+        <button class="nav-link" type="button" data-view="timeline"><span class="nav-icon">☷</span> Run history</button>
+        <button class="nav-link" type="button" data-view="setup"><span class="nav-icon">⚙</span> Setup guide</button>
+      </nav>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-card">
+        <div class="tiny-label"><span class="green-ping"></span> COMMUNITY EDITION</div>
+        <h3>Open by design.</h3>
+        <p>Try the workflow without accounts, tokens, or paid APIs.</p>
+        <a href="https://github.com/ahpa5246-lgtm/Free-Agent-Swarm" target="_blank" rel="noopener noreferrer">Explore GitHub <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="sidebar-bottom"><span class="avatar">FS</span><div><strong>Local workspace</strong><small>Demo environment</small></div><span class="local-dot"></span></div>
+    </aside>
+
+    <div class="body-column">
+      <header class="topbar">
+        <div class="crumb"><span>Workspace</span><span class="crumb-sep">/</span><strong id="currentView">Overview</strong></div>
+        <div class="top-actions"><span class="top-tag"><span class="green-ping"></span> Offline demo</span><a class="icon-action" href="https://github.com/ahpa5246-lgtm/Free-Agent-Swarm" target="_blank" rel="noopener noreferrer" title="Open repository" aria-label="Open GitHub repository">↗</a></div>
+      </header>
+
+      <main id="overview" class="workspace" data-panel>
+        <section class="hero">
+          <div class="hero-copy"><div class="eyebrow"><span class="tiny-diamond">◆</span> AUTONOMOUS ORCHESTRATION / DEMO V0.1</div>
+            <h1>One mission.<br><span>Every agent.</span></h1>
+            <p>When one AI hits its limit, another picks up the thread. Explore a transparent handoff system built for developers — free to try, open to everyone.</p>
+            <div class="hero-buttons"><button class="primary-btn" id="heroStart" type="button">Launch a demo run <span aria-hidden="true">↗</span></button><a class="ghost-btn" href="https://github.com/ahpa5246-lgtm/Free-Agent-Swarm#readme" target="_blank" rel="noopener noreferrer">View documentation <span aria-hidden="true">↗</span></a></div>
+          </div>
+          <div class="hero-art" aria-hidden="true"><div class="orbit orbit-outer"></div><div class="orbit orbit-mid"></div><div class="orbit orbit-inner"></div><div class="orbit-center"><span class="orbit-core">✳</span></div><span class="orbit-node node-one">CX</span><span class="orbit-node node-two">DS</span><span class="orbit-node node-three">GM</span><span class="orbit-node node-four">KM</span><div class="art-caption"><span class="green-ping"></span> AGENTS IN SYNC</div></div>
+        </section>
+        <section class="metrics" aria-label="Demo statistics">
+          <div class="metric"><div class="metric-top">ACTIVE AGENTS <span>↗</span></div><div class="metric-main"><strong>06</strong><small>Configured in demo</small></div></div>
+          <div class="metric"><div class="metric-top">HANDOFFS <span>↗</span></div><div class="metric-main"><strong id="metricHandoffs">00</strong><small>In current run</small></div></div>
+          <div class="metric"><div class="metric-top">PROGRESS <span>↗</span></div><div class="metric-main"><strong id="metricProgress">0%</strong><small id="metricStatus">Ready to launch</small></div></div>
+          <div class="metric"><div class="metric-top">DEMO COST <span>↗</span></div><div class="metric-main"><strong>$0</strong><small>Zero API requests</small></div></div>
+        </section>
+        <div class="two-column">
+          <section class="surface task-panel" id="taskPanel" aria-labelledby="taskHeading"><div class="section-heading"><div><div class="section-kicker">01 / WORKSPACE</div><h2 id="taskHeading">New mission</h2></div><span class="outline-tag">Simulation mode</span></div>
+            <form id="taskForm"><label for="repoInput">TARGET REPOSITORY <span class="label-optional">(example only)</span></label><div class="input-wrap"><span>⌁</span><input id="repoInput" name="repository" maxlength="120" value="example/my-project" required spellcheck="false" placeholder="owner/repository" /></div><label for="taskInput">YOUR TASK</label><textarea id="taskInput" name="task" rows="3" maxlength="240" required placeholder="Describe what you want your agents to do...">Review this project, fix an accessibility issue, and prepare a draft PR.</textarea>
+              <div class="form-footer"><div class="note"><span>ⓘ</span> No repositories are accessed or modified.</div><button class="primary-btn smaller" id="startButton" type="submit">Start simulation <span aria-hidden="true">→</span></button></div>
+            </form>
+          </section>
+          <section class="surface status-panel" aria-labelledby="liveHeading"><div class="section-heading"><div><div class="section-kicker">02 / EXECUTION</div><h2 id="liveHeading">Live mission status</h2></div><span id="runPill" class="run-pill idle"><span></span> Idle</span></div>
+            <div class="status-description" id="statusDescription">Launch a demo mission to watch an automatic handoff from one agent to another.</div>
+            <div class="progress-row"><span>MISSION PROGRESS</span><strong id="progressLabel">0 / 7 stages</strong></div><div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+            <div class="phase-nodes" aria-hidden="true"><span class="selected"></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+            <div class="status-divider"></div><div class="current-agent"><div><small>ACTIVE AGENT</small><strong id="activeAgent">Not assigned</strong></div><div id="activeAgentBadge" class="agent-badge big">–</div></div>
+            <div class="status-buttons"><button class="secondary-btn" id="stepButton" type="button" disabled>Next step →</button><button class="secondary-btn" id="autoButton" type="button" disabled>Auto-play ▷</button><button class="text-btn" id="resetButton" type="button">Reset</button></div>
+          </section>
+        </div>
+        <section class="surface network-panel" aria-labelledby="networkHeading"><div class="section-heading section-heading-inline"><div><div class="section-kicker">03 / THE NETWORK</div><h2 id="networkHeading">Agent roster</h2></div><button class="text-btn" id="viewAgents" type="button">View all agents ↗</button></div><div id="agentGrid" class="agent-grid"></div></section>
+        <section class="surface events-panel" aria-labelledby="activityHeading"><div class="section-heading section-heading-inline"><div><div class="section-kicker">04 / ACTIVITY</div><h2 id="activityHeading">Execution timeline</h2></div><div class="event-actions"><button class="text-btn" id="exportButton" type="button" disabled>Export checkpoint ↓</button><button class="text-btn" id="importButton" type="button">Import ↑</button><input id="importInput" type="file" accept="application/json,.json" hidden /></div></div><div id="eventList" class="event-list" aria-live="polite"><div class="empty-state">No activity yet. Start a demo to see each decision and handoff.</div></div></section>
+        <footer class="footer"><span>Free Agent Swarm · Open-source concept</span><span>Simulation ≠ live provider connectivity</span></footer>
+      </main>
+
+      <main id="agents" class="workspace view-hidden" data-panel><div class="page-intro"><div class="section-kicker">AGENT NETWORK</div><h1>One team. Multiple minds.</h1><p>Agents are illustrative until you deploy the orchestrator and configure permitted provider credentials. Every quota below is a demo quota, not a real service limit.</p></div><section class="surface"><div class="section-heading"><div><h2>Available agent roles</h2><p class="muted">Routing is determined by available quota and task policy.</p></div><span class="outline-tag">6 demo providers</span></div><div id="agentGridFull" class="agent-grid expanded"></div></section><section class="surface explainer"><div class="section-kicker">PROVIDER ACCESS</div><h2>No hidden API charges</h2><p>The browser demo never asks for keys. A real orchestration installation must use your own approved provider access, enforce quotas, and store secrets in a server-side secret manager.</p></section></main>
+      <main id="timeline" class="workspace view-hidden" data-panel><div class="page-intro"><div class="section-kicker">EXECUTION RECORDS</div><h1>Nothing gets lost.</h1><p>Each simulated decision is recorded as a checkpoint you can export and restore on another device.</p></div><section class="surface"><div class="section-heading"><h2>Run events</h2><button class="text-btn" id="timelineExport" type="button">Export JSON ↓</button></div><div id="eventListFull" class="event-list"></div></section></main>
+      <main id="setup" class="workspace view-hidden" data-panel><div class="page-intro"><div class="section-kicker">GET STARTED</div><h1>Run it your way.</h1><p>Start with the offline demo. Then import the included n8n workflow into your own n8n instance when you're ready.</p></div><div class="setup-cards"><section class="surface setup-step"><span>01</span><h2>Explore without signing in</h2><p>Use the interactive simulator, test quota exhaustion and handoffs, and export a JSON checkpoint.</p><button class="secondary-btn" type="button" data-go="overview">Go to simulator ↗</button></section><section class="surface setup-step"><span>02</span><h2>Import the n8n workflow</h2><p>Download the workflow from GitHub and import it in n8n. The webhook requires your own Header Auth credential.</p><a class="secondary-btn" target="_blank" rel="noopener noreferrer" href="https://github.com/ahpa5246-lgtm/Free-Agent-Swarm/tree/main/n8n/workflows">Browse workflows ↗</a></section><section class="surface setup-step"><span>03</span><h2>Configure real agents later</h2><p>The prototype does not silently call paid APIs or automate subscription web interfaces. Real provider adapters require explicit server-side configuration.</p><a class="secondary-btn" target="_blank" rel="noopener noreferrer" href="https://github.com/ahpa5246-lgtm/Free-Agent-Swarm/blob/main/docs/ARCHITECTURE.md">Architecture ↗</a></section></div></main>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="/src/app.mjs"></script>
+</body>
+</html>

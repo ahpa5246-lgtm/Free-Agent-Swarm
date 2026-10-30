@@ -1,0 +1,11 @@
+{
+  "name": "Free Agent Swarm",
+  "short_name": "Agent Swarm",
+  "description": "Open-source multi-agent orchestration demo",
+  "start_url": "/#overview",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0a0f18",
+  "theme_color": "#0b101a",
+  "icons": [{"src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
+}
