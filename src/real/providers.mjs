@@ -8,7 +8,7 @@ export const FREE_ROUTES = Object.freeze([
   { id: 'gemini-flash-lite', provider: 'gemini', model: 'gemini-3.1-flash-lite', env: 'GEMINI_API_KEY' },
   { id: 'openrouter-free', provider: 'openrouter', model: 'openrouter/free', env: 'OPENROUTER_API_KEY' },
   { id: 'groq-qwen', provider: 'groq', model: 'qwen/qwen3.8-27b', env: 'GROQ_API_KEY' }
-]);
+].map(route => Object.freeze(route)));
 
 const ENDPOINTS = Object.freeze({
   groq: 'https://api.groq.com/openai/v1/chat/completions',
@@ -35,7 +35,7 @@ function textOf(data, provider) {
 }
 
 export async function requestFreeModel(route, prompt, { fetchImpl = fetch, env = process.env, timeoutMs = 25000 } = {}) {
-  if (!FREE_ROUTES.some(r => r.id === route.id && r.model === route.model && r.provider === route.provider)) {
+  if (!route || !FREE_ROUTES.some(r => r.id === route.id && r.model === route.model && r.provider === route.provider && r.env === route.env)) {
     throw new ProviderFailure('Non-allowlisted model route', { provider: route.provider });
   }
   const secret = env[route.env];
@@ -87,7 +87,7 @@ export async function failoverFree(prompt, { routes = FREE_ROUTES, env = process
       if (!(error instanceof ProviderFailure)) throw error;
       events.push({ route: route.id, state: error.status === 429 ? 'quota_exhausted' : 'failed', status: error.status, reason: error.message });
       // Same-provider routes share account quota. Do not rotate Groq models on 429.
-      if (error.status === 429 || error.status === 401 || error.status === 402 || error.status === 403) providerCooldown.add(route.provider);
+      if ([401, 402, 403, 408, 429, 502, 503, 504].includes(error.status)) providerCooldown.add(route.provider);
     }
   }
   const err = new Error(attempted ? 'No free provider succeeded; no code was changed.' : 'No free API keys configured; no code was changed.');

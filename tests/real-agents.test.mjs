@@ -63,15 +63,16 @@ test('reject symbolic links outside repository', async () => {
   finally { await rm(root,{recursive:true,force:true}); }
 });
 
-test('reject a symlinked parent directory before reading or writing', async () => {
-  const root=await temp(), outside=await mkdtemp(resolve(tmpdir(),'swarm-outside-'));
+test('reject a symlinked ancestor even if target leaf is an ordinary file', async () => {
+  const root=await temp();
+  const outside=await mkdtemp(resolve(tmpdir(),'swarm-outside-'));
   try {
     await writeFile(resolve(outside,'private.mjs'),'export const hidden = true;\n');
     await symlink(outside,resolve(root,'src','shortcut'));
     await assert.rejects(()=>readTarget(root,'src/shortcut/private.mjs'),/Symlink/);
     await assert.rejects(()=>codeOneFile({root,targetPath:'src/shortcut/private.mjs',task:'overwrite',env,fetchImpl:async()=>chat(answer('src/shortcut/private.mjs'))}),/Symlink/);
     assert.equal(await readFile(resolve(outside,'private.mjs'),'utf8'),'export const hidden = true;\n');
-  } finally {await rm(root,{recursive:true,force:true}); await rm(outside,{recursive:true,force:true});}
+  } finally {await rm(root,{recursive:true,force:true});await rm(outside,{recursive:true,force:true});}
 });
 
 test('invalid JSON or unexpected file path cannot modify source', async () => {
@@ -119,4 +120,64 @@ test('parseProposal respects exact JSON schema and maximum size', () => {
   assert.deepEqual(parseProposal('```json\n'+answer('src/f.mjs')+'\n```','src/f.mjs').path,'src/f.mjs');
   assert.throws(()=>parseProposal(answer('src/f.mjs','x'.repeat(19000)),'src/f.mjs'),/safety limits/);
   assert.throws(()=>parseProposal('not a JSON','src/f.mjs'),/invalid JSON/);
+});
+
+test('free routes cannot be mutated or redirected to another secret env variable', async () => {
+  assert.ok(FREE_ROUTES.every(Object.isFrozen));
+  let calls = 0;
+  await assert.rejects(() => requestFreeModel(
+    { ...FREE_ROUTES[0], env: 'UNRELATED_DEPLOY_TOKEN' }, 'task',
+    { env: { ...env, UNRELATED_DEPLOY_TOKEN: 'sensitive-value' }, fetchImpl: async () => { calls++; return chat('ok'); } }
+  ), /Non-allowlisted/);
+  assert.equal(calls, 0);
+});
+
+test('upstream service-unavailable response skips the remaining models of the failing provider', async () => {
+  const attempts = [];
+  const output = await failoverFree('task', {
+    routes: [FREE_ROUTES[0], FREE_ROUTES[3], FREE_ROUTES[1]], env,
+    fetchImpl: async url => { attempts.push(url); return url.includes('groq.com') ? response({},503) : gemini('ready'); }
+  });
+  assert.equal(output.provider, 'gemini');
+  assert.equal(attempts.length, 2);
+});
+
+test('reject malformed UTF-8 and NUL data instead of silently rewriting a non-text file', async () => {
+  const root = await temp();
+  try {
+    await writeFile(resolve(root,'src/fixture.mjs'), Buffer.from([0xff,0xfe,0xfd]));
+    await assert.rejects(() => readTarget(root,'src/fixture.mjs'),/Invalid UTF-8/);
+    await writeFile(resolve(root,'src/fixture.mjs'), Buffer.from([0x61,0x00,0x62]));
+    await assert.rejects(() => readTarget(root,'src/fixture.mjs'),/NUL/);
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test('concurrent edit while inference is running stops without writing a proposed result', async () => {
+  const root = await temp();
+  try {
+    await assert.rejects(() => codeOneFile({root,targetPath:'src/fixture.mjs',task:'update',env,
+      fetchImpl: async () => {
+        await writeFile(resolve(root,'src/fixture.mjs'),'export const value = 19;\n');
+        return chat(answer('src/fixture.mjs'));
+      }}),/Concurrent file modification/);
+    assert.equal(await readFile(resolve(root,'src/fixture.mjs'),'utf8'),'export const value = 19;\n');
+  } finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test('last-minute symlink replacement cannot overwrite the destination outside checkout', async () => {
+  const root = await temp(), outside = await mkdtemp(resolve(tmpdir(),'swarm-victim-'));
+  try {
+    await writeFile(resolve(outside,'victim.mjs'),'export const secret = 1;\n');
+    await assert.rejects(() => codeOneFile({root,targetPath:'src/fixture.mjs',task:'update',env,
+      fetchImpl: async () => {
+        await rm(resolve(root,'src/fixture.mjs'));
+        await symlink(resolve(outside,'victim.mjs'),resolve(root,'src/fixture.mjs'));
+        return chat(answer('src/fixture.mjs'));
+      }}),/Symlink/);
+    assert.equal(await readFile(resolve(outside,'victim.mjs'),'utf8'),'export const secret = 1;\n');
+  } finally { await rm(root,{recursive:true,force:true}); await rm(outside,{recursive:true,force:true}); }
+});
+
+test('reject control characters in provider-generated change summary', () => {
+  assert.throws(() => parseProposal(JSON.stringify({path:'src/a.mjs',content:'export const a=1;',summary:'hello\nspoof'}),'src/a.mjs'),/safety limits/);
 });
