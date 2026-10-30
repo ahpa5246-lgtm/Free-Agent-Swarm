@@ -4,14 +4,14 @@
 
 [Try the web demo after deployment](#deploy-the-website) · [Run locally](#run-locally) · [Import n8n workflows](#n8n-workflows) · [Architecture](docs/ARCHITECTURE.md)
 
-The v0.1 website is an **offline-first simulation**. It transparently demonstrates what happens when Codex reaches a simulated quota and the task is handed to DeepSeek. There are **zero real API calls and zero repository modifications** from the browser. All six provider names illustrate roles, not live account integrations.
+The v0.3 Neo-Brutalist website is an **offline-first simulation**. It transparently demonstrates what happens when Codex reaches a simulated quota and the task is handed to DeepSeek. There are **zero real API calls and zero repository modifications** from the browser. All six provider names illustrate roles, not live account integrations.
 
 ## What works now
 
-- Beautiful responsive web dashboard; no login and no API key needed to explore.
+- Distinctive Neo-Brutalist control room, responsive on mobile and desktop; no login or API key required.
 - Deterministic 7-stage run simulation: accept → inspect → quota limit → handoff → implementation proposal → validation → mock PR.
 - Step-through or auto-play; pause/resume; local checkpoint persistence; safe JSON export/import.
-- Six-agent roster with clearly labeled **demo** quotas.
+- Six-agent roster with clearly labeled **demo** quotas; click-to-inspect map and three editable mission presets.
 - Installable PWA with offline static asset cache.
 - Importable n8n sample with no API calls (`n8n/workflows/zero-key-simulation.json`).
 - Separate **planning-only** n8n workflow with OpenRouter `openrouter/free` → Groq `openai/gpt-oss-120b` fallback for 429/503, requiring **user-supplied n8n credentials**. This generates a technical plan; it does **not** execute code or edit repositories.
@@ -56,3 +56,7 @@ This is an **MVP**, not an autonomous 24/7 coding service. The real n8n workflow
 Free to download and self-host, user-controlled credentials, explicit rate limits, no misleading quota bypass claims, draft PRs and human approval before merges, no secrets in the public repository.
 
 Contributions welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Security notes: [SECURITY.md](SECURITY.md).
+
+## Chosen visual direction
+
+The owner selected Neo-Brutalism. See [design decisions, provenance and license boundaries](docs/NEOBRUTALISM_DESIGN.md). The new interface preserves the six-agent simulator, checkpoint export/import, PWA caching, and both importable n8n workflows; no live agent capability was invented.

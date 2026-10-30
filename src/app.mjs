@@ -1,135 +1,102 @@
 import { AGENTS, createRun, advanceRun, summarizeRun, exportCheckpoint, importCheckpoint } from './engine.mjs';
-
-const STORAGE_KEY = 'free-agent-swarm-demo-v1';
+const KEY = 'free-agent-swarm-demo-v1';
 const $ = id => document.getElementById(id);
 let run = null;
-let interval = null;
-const agentCards = new Map();
-
-function safelyLoad() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? importCheckpoint(saved) : null;
-  } catch {
-    localStorage.removeItem(STORAGE_KEY);
-    return null;
-  }
-}
-function save() {
-  try { if (run) localStorage.setItem(STORAGE_KEY, exportCheckpoint(run)); else localStorage.removeItem(STORAGE_KEY); }
-  catch { toast('Browser storage is unavailable; export a checkpoint instead.'); }
-}
-function toast(message) {
-  const element = $('toast');
-  element.textContent = message;
-  element.classList.add('visible');
-  clearTimeout(toast._timeout);
-  toast._timeout = setTimeout(() => element.classList.remove('visible'), 3300);
-}
-function text(tag, value, className = '') {
-  const node = document.createElement(tag); node.textContent = value;
-  if (className) node.className = className;
-  return node;
-}
-function renderAgents(containerId, expanded = false) {
-  const grid = $(containerId); grid.replaceChildren();
-  for (const agent of AGENTS) {
-    const card = document.createElement('article'); card.className = 'agent-card'; card.dataset.agent = agent.id;
-    const upper = document.createElement('div'); upper.className = 'agent-top';
-    const badge = text('div', agent.initials, 'agent-badge'); badge.style.setProperty('--agent-accent', agent.color);
-    upper.append(badge, text('span', 'SIMULATED', 'mini-status'));
-    card.append(upper, text('h3', agent.name), text('p', agent.role));
-    const foot = document.createElement('div'); foot.className = 'agent-foot';
-    foot.append(text('span', 'Demo quota'), text('strong', `${run ? run.credits[agent.id] : agent.demoCredits} left`));
-    card.append(foot); grid.append(card);
-  }
-}
-function renderEvents(containerId) {
-  const list = $(containerId); if (!list) return;
-  list.replaceChildren();
-  if (!run || run.events.length === 0) {
-    list.append(text('div', 'No activity yet. Start a demo to see each decision and handoff.', 'empty-state')); return;
-  }
+let timer = null;
+let inspected = 'codex';
+const presets = {
+  accessibility: 'Review this project, fix an accessibility issue, and prepare a draft PR.',
+  testing: 'Write focused regression tests for an existing feature, check the results, and prepare a draft PR.',
+  refactor: 'Safely refactor one duplicated module without behavior changes, then run relevant tests.'
+};
+const node = (tag, str, cls) => { const element = document.createElement(tag); element.textContent = str; if (cls) element.className = cls; return element; };
+function toast(message) { const element = $('toast'); element.textContent = message; element.classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => element.classList.remove('visible'), 2800); }
+function load() { try { const stored = localStorage.getItem(KEY); return stored ? importCheckpoint(stored) : null; } catch { return null; } }
+function save() { try { if (run) localStorage.setItem(KEY, exportCheckpoint(run)); else localStorage.removeItem(KEY); } catch { toast('Local storage is unavailable. Export a checkpoint to preserve your run.'); } }
+function renderEvents(id) {
+  const element = $(id); element.replaceChildren();
+  if (!run?.events.length) { element.append(node('div', 'Nothing here yet. Start a demo run and the entire handoff will show up.', 'empty-data')); return; }
   for (const event of [...run.events].reverse()) {
-    const row = document.createElement('div'); row.className = `event-item event-${event.type}`;
-    const dot = document.createElement('div'); dot.className = 'event-marker'; dot.textContent = event.type === 'success' ? '✓' : event.type === 'warning' ? '!' : event.type === 'handoff' ? '↗' : '•';
-    const body = document.createElement('div'); body.className = 'event-body';
-    body.append(text('strong', event.title), text('p', event.detail));
-    const stamp = text('span', new Date(event.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), 'event-time');
-    row.append(dot, body, stamp); list.append(row);
+    const row = node('div', '', 'event-item event-' + event.type);
+    const mark = node('div', event.type === 'success' ? '✓' : event.type === 'warning' ? '!' : event.type === 'handoff' ? '↗' : '•', 'event-marker');
+    const body = node('div', '', 'event-body'); body.append(node('strong', event.title), node('p', event.detail));
+    row.append(mark, body, node('span', new Date(event.at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), 'event-time'));
+    element.append(row);
+  }
+}
+function renderDirectory() {
+  const element = $('agentGridFull'); element.replaceChildren();
+  for (const agent of AGENTS) {
+    const card = node('article', '', 'agent-directory-card'); card.style.setProperty('--agent-accent', agent.color);
+    card.append(node('div', agent.initials, 'directory-symbol'), node('h2', agent.name), node('p', agent.role));
+    const foot = node('div', '', 'directory-meta'); foot.append(node('span', 'SIMULATED CREDITS'), node('strong', (run?.credits[agent.id] ?? agent.demoCredits) + ' UNITS'));
+    card.append(foot); element.append(card);
   }
 }
 function render() {
-  const summary = run ? summarizeRun(run) : { progress: 0, handoffs: 0, active: 'Not assigned' };
+  const summary = run ? summarizeRun(run) : { progress: 0, handoffs: 0, active: 'Supervisor' };
   $('metricHandoffs').textContent = String(summary.handoffs).padStart(2, '0');
-  $('metricProgress').textContent = `${summary.progress}%`;
-  $('metricStatus').textContent = !run ? 'Ready to launch' : run.status === 'complete' ? 'Review ready' : run.status === 'blocked' ? 'Quota exhausted' : 'Simulation active';
-  $('progressLabel').textContent = `${run?.phase ?? 0} / 7 stages`;
-  $('progressFill').style.width = `${summary.progress}%`;
-  $('activeAgent').textContent = run ? summary.active : 'Not assigned';
-  const active = AGENTS.find(agent => agent.id === run?.activeAgent);
-  $('activeAgentBadge').textContent = active?.initials ?? '–';
-  $('activeAgentBadge').style.setProperty('--agent-accent', active?.color ?? '#7e91a9');
-  const pill = $('runPill'); pill.className = `run-pill ${run ? run.status : 'idle'}`;
-  pill.replaceChildren(text('span', ''), document.createTextNode(!run ? ' Idle' : run.status === 'complete' ? ' Complete' : run.status === 'blocked' ? ' Blocked' : ' Running'));
-  $('statusDescription').textContent = !run ? 'Launch a demo mission to watch an automatic handoff from one agent to another.' : run.status === 'complete' ? 'Simulation complete. Your mock draft PR is ready for review.' : run.status === 'blocked' ? 'Every provider is unavailable. Import a checkpoint or reset to try again.' : `Working on “${run.title}” · no external APIs or repositories touched.`;
-  $('stepButton').disabled = !run || run.status === 'complete' || run.status === 'blocked';
-  $('autoButton').disabled = !run || run.status === 'complete' || run.status === 'blocked';
-  $('autoButton').textContent = interval ? 'Pause ‖' : 'Auto-play ▷';
-  $('exportButton').disabled = !run;
-  document.querySelectorAll('.phase-nodes span').forEach((dot, index) => { dot.className = index < (run?.phase ?? 0) ? 'finished' : index === (run?.phase ?? 0) ? 'selected' : ''; });
-  renderAgents('agentGrid'); renderAgents('agentGridFull', true);
-  renderEvents('eventList'); renderEvents('eventListFull');
+  $('metricProgress').textContent = summary.progress + '%'; $('progressLabel').textContent = (run?.phase ?? 0) + ' / 7';
+  $('progressFill').style.width = summary.progress + '%'; $('activeAgent').textContent = summary.active;
+  $('activeAgentBadge').textContent = AGENTS.find(a => a.id === run?.activeAgent)?.initials ?? '✳';
+  $('statusDescription').textContent = !run ? 'Waiting for a mission to begin.' : run.status === 'complete' ? 'Mock review complete. No real files were touched.' : run.status === 'blocked' ? 'No eligible demo quota remains. Your checkpoint is preserved.' : `Working through a simulated task in ${run.repository}`;
+  const pill = $('runPill'); pill.className = 'run-pill ' + (run?.status ?? 'idle'); pill.textContent = (run?.status ?? 'idle').toUpperCase();
+  $('networkStatus').textContent = run ? 'RUN / ' + run.status.toUpperCase() : 'AWAITING MISSION';
+  $('networkVisual').dataset.phase = run?.phase ?? 0;
+  $('agentCodexState').textContent = run?.credits.codex === 0 ? 'QUOTA REACHED' : 'PRIORITY 01';
+  $('agentDeepseekState').textContent = run?.activeAgent === 'deepseek' ? 'ACTIVE FALLBACK' : 'STANDBY';
+  for (const agent of document.querySelectorAll('.map-agent')) { const active = agent.dataset.agent === inspected; agent.classList.toggle('selected', active); agent.setAttribute('aria-pressed', String(active)); }
+  const selected = AGENTS.find(agent => agent.id === inspected) ?? AGENTS[0];
+  $('selectedAgentName').textContent = selected.name; $('selectedAgentRole').textContent = selected.role;
+  $('selectedAgentCredits').textContent = String(run?.credits[selected.id] ?? selected.demoCredits);
+  for (const id of ['stepButton', 'autoButton']) $(id).disabled = !run || ['complete', 'blocked'].includes(run.status);
+  $('autoButton').textContent = timer ? 'PAUSE ‖' : 'AUTO PLAY ▷'; $('exportButton').disabled = !run;
+  $('timelineExport').disabled = !run;
+  renderEvents('eventList'); renderEvents('eventListFull'); renderDirectory();
 }
-function stopAuto() { if (interval) clearInterval(interval); interval = null; }
+function stop() { if (timer) clearInterval(timer); timer = null; }
 function step() {
-  if (!run || ['complete', 'blocked'].includes(run.status)) { stopAuto(); return; }
-  run = advanceRun(run); save(); render();
-  if (['complete', 'blocked'].includes(run.status)) { stopAuto(); render(); toast(run.status === 'complete' ? 'Simulation finished. Check the timeline.' : 'No remaining demo quota.'); }
+  if (!run || ['complete', 'blocked'].includes(run.status)) { stop(); return; }
+  run = advanceRun(run); inspected = run.activeAgent; save(); render();
+  if (['complete', 'blocked'].includes(run.status)) { stop(); render(); toast(run.status === 'complete' ? 'Demo finished: mock review ready.' : 'No demo providers available.'); }
 }
-function startDemo(event) {
-  event?.preventDefault(); stopAuto();
-  try { run = createRun({ title: $('taskInput').value, repository: $('repoInput').value }); save(); render(); step(); toast('Demo launched — step through or press Auto-play.'); }
-  catch (error) { toast(error.message); }
+function start(event) {
+  event?.preventDefault(); stop();
+  try { run = createRun({title: $('taskInput').value, repository: $('repoInput').value}); inspected = 'codex'; save(); step(); toast('Simulation started — choose next step or auto-play.'); }
+  catch (err) { toast(err.message); }
 }
-function downloadCheckpoint() {
-  if (!run) { toast('Start a demo first.'); return; }
-  const blob = new Blob([exportCheckpoint(run)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob); const link = document.createElement('a');
-  link.href = url; link.download = `swarm-${run.runId}.json`; link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+const views = {overview:'Control room', agents:'The agents', timeline:'Run replay', setup:'Get connected'};
+function show(view) {
+  if (!Object.hasOwn(views, view)) return;
+  document.querySelectorAll('[data-panel]').forEach(element => element.classList.toggle('hidden', element.id !== view));
+  document.querySelectorAll('[data-view]').forEach(element => { const active = element.dataset.view === view; element.classList.toggle('active', active); if (active) element.setAttribute('aria-current', 'page'); else element.removeAttribute('aria-current'); });
+  $('currentView').textContent = views[view]; if (location.hash !== '#' + view) history.replaceState(null, '', '#' + view); window.scrollTo({top:0,behavior:'instant'});
 }
-function showView(id) {
-  for (const panel of document.querySelectorAll('[data-panel]')) panel.classList.toggle('view-hidden', panel.id !== id);
-  for (const tab of document.querySelectorAll('[data-view]')) tab.classList.toggle('active', tab.dataset.view === id);
-  $('currentView').textContent = ({ overview: 'Overview', agents: 'Agent network', timeline: 'Run history', setup: 'Setup guide' })[id] ?? 'Overview';
-  window.location.hash = id; window.scrollTo({ top: 0, behavior: 'smooth' });
+function exportJSON() {
+  if (!run) return toast('Start a run before exporting.');
+  const url = URL.createObjectURL(new Blob([exportCheckpoint(run)], {type:'application/json'}));
+  const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'swarm-' + run.runId + '.json'; anchor.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-
-$('taskForm').addEventListener('submit', startDemo);
-$('heroStart').addEventListener('click', () => { showView('overview'); startDemo(); });
+$('taskForm').addEventListener('submit', start);
+$('heroStart').addEventListener('click', () => { show('overview'); start(); $('taskForm').scrollIntoView({block:'center',behavior:'smooth'}); });
 $('stepButton').addEventListener('click', step);
-$('autoButton').addEventListener('click', () => {
-  if (interval) { stopAuto(); render(); return; }
-  interval = setInterval(step, 850); render();
-});
-$('resetButton').addEventListener('click', () => { stopAuto(); run = null; save(); render(); toast('Demo cleared.'); });
-$('viewAgents').addEventListener('click', () => showView('agents'));
-$('exportButton').addEventListener('click', downloadCheckpoint);
-$('timelineExport').addEventListener('click', downloadCheckpoint);
+$('autoButton').addEventListener('click', () => { if (timer) { stop(); render(); return; } timer = setInterval(step, 950); render(); });
+$('resetButton').addEventListener('click', () => { stop(); run = null; inspected = 'codex'; save(); render(); toast('Demo reset. Ready for a new mission.'); });
+$('exportButton').addEventListener('click', exportJSON); $('timelineExport').addEventListener('click', exportJSON);
 $('importButton').addEventListener('click', () => $('importInput').click());
 $('importInput').addEventListener('change', async event => {
-  const file = event.target.files?.[0];
-  event.target.value = '';
-  if (!file) return;
-  if (file.size > 100_000) { toast('Checkpoint file is too large.'); return; }
-  try { stopAuto(); run = importCheckpoint(await file.text()); save(); render(); toast('Checkpoint restored.'); }
-  catch { toast('Invalid checkpoint. No data imported.'); }
+  const file = event.target.files?.[0]; event.target.value = ''; if (!file) return;
+  if (file.size > 100000) return toast('Checkpoint too large.');
+  try { const restored = importCheckpoint(await file.text()); stop(); run = restored; inspected = run.activeAgent; save(); render(); toast('Checkpoint restored.'); } catch { toast('Invalid checkpoint.'); }
 });
-document.querySelectorAll('[data-view]').forEach(link => link.addEventListener('click', () => showView(link.dataset.view)));
-document.querySelectorAll('[data-go]').forEach(link => link.addEventListener('click', () => showView(link.dataset.go)));
-window.addEventListener('hashchange', () => { const name = window.location.hash.slice(1); if (['overview','agents','timeline','setup'].includes(name)) showView(name); });
-run = safelyLoad(); render();
-const startingView = window.location.hash.slice(1);
-if (['agents','timeline','setup'].includes(startingView)) showView(startingView);
+document.querySelectorAll('[data-view]').forEach(element => element.addEventListener('click', () => show(element.dataset.view)));
+document.querySelectorAll('[data-go]').forEach(element => element.addEventListener('click', () => show(element.dataset.go)));
+document.querySelectorAll('[data-agent]').forEach(element => element.addEventListener('click', () => { inspected = element.dataset.agent; render(); }));
+document.querySelectorAll('[data-scenario]').forEach(element => element.addEventListener('click', () => {
+  $('taskInput').value = presets[element.dataset.scenario];
+  document.querySelectorAll('[data-scenario]').forEach(button => button.classList.toggle('active', button === element));
+  $('taskInput').focus();
+}));
+window.addEventListener('hashchange', () => show(location.hash.slice(1)));
+run = load(); if (run) inspected = run.activeAgent; render(); show(location.hash.slice(1) || 'overview');
 if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('/sw.js').catch(() => {});

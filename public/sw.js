@@ -1,4 +1,4 @@
-const CACHE = 'fas-demo-v1';
+const CACHE = 'fas-demo-neo-v3';
 const STATIC = ['/', '/index.html', '/src/styles.css', '/src/app.mjs', '/src/engine.mjs', '/manifest.webmanifest', '/icons/icon.svg'];
 self.addEventListener('install', event => event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(STATIC)).then(() => self.skipWaiting())));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
