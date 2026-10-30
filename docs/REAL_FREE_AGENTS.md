@@ -41,19 +41,19 @@ Use the *manual workflow* first: the n8n example assumes that you have already v
 ## Security and limitations
 
 - Model output is untrusted. All edits are restricted to the specified existing source/docs file; symlinked files, symlinked parent directories, hidden segments, traversal and unexpected paths are rejected; concurrent file changes are detected via SHA-256.
-- The runner is divided into three GitHub Actions jobs: `generate` (read-only with provider keys), `validate` (read-only, no provider keys), and `publish` (write permissions, **never executes model-generated code**). A bounded patch artifact crosses jobs. The validation job can still access ephemeral GitHub Actions runtime facilities; this is **not** a multi-tenant sandbox.
+- The runner separates `generate` (read-only with provider keys), `validate` (read-only, no API keys), and `publish` (write token; **does not execute generated code**) jobs. Patch artifacts cross jobs only after strict scope checking. This is not a public multi-tenant security sandbox.
 - The test/build process executes modified code. CI is still not a hardened sandbox; enable network isolation or a dedicated restricted runner for **untrusted** codebases before exposing the product to arbitrary users. Only authorized repository maintainers should dispatch this workflow.
 - Model-generated code is not automatically correct even when tests pass. Draft PR review is mandatory. No production auto-merge or deploy.
 - This does **not** yet allow multiple agents to edit the same repository asynchronously in long, independent sessions; it handles bounded single-file tasks and free-provider failover. Durable cross-run task orchestration and a public multi-user backend are later milestones.
 
-## Explicit release blockers (2026-10-30 hardening review)
+## Hardening review: release blockers (2026-10-30)
 
-- **No live API smoke test**: mock HTTP tests only; make one genuine, permissioned call to each configured provider before claiming connectivity.
-- **Not a safe public multi-tenant runner**: even with read-only `validate`, untrusted generated test code executes on a network-capable GitHub-hosted runner. Provide an isolated no-secrets/no-network runner before allowing strangers to submit code.
-- **Not a six-model swarm**: four API routes (two share Groq), no coordinated agent debate or persistent multi-step planning. UI is separate offline simulation.
-- **No automatic billing detection**: `confirm_free_tier` is operator attestation, not a provider-side guarantee. Reject paid accounts at operational setup; never automatically upgrade.
-- **Human review required**: no auto-merge/deploy. PRs must be inspected for malicious or broken changes and sensitive data exposure.
-- **Stacked feature PRs**: this workflow only appears on the default branch after review and merges. Do not treat passing CI as deployment.
+- Provider calls were tested with HTTP mocks. No live API model has been confirmed with credentials.
+- Generated code is still tested on a networked GitHub runner: before public multi-user access, require a separate no-secrets, network-isolated sandbox.
+- The product exposes four API routes across three providers, NOT six coordinated autonomous agents. Two Groq routes share a quota pool.
+- Free-tier account confirmation is a checkbox, not billing verification. Never enable billing as a fallback.
+- All proposed changes require human PR review. No automatic merge or deployment.
+- Manual workflow dispatch becomes available only once the stacked PRs have reached default branch `main`.
 
 ## Additional safety and deployment gates (v0.5)
 
