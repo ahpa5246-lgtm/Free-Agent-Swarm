@@ -26,6 +26,11 @@ test('n8n real dispatch is disabled and authenticated before execution',()=>{
   assert.doesNotMatch(JSON.stringify(wf),/Bearer\s+sk-[A-Za-z0-9]+/);
 });
 
+test('static build excludes server-only model adapters',()=>{
+  const build=read('scripts/build.mjs');
+  assert.match(build, /rm\(resolve\(dist, 'src\/real'\)/);
+});
+
 test('live UI links to manually gated runner but still labels demo as demo',()=>{
   const page=read('index.html');
   assert.match(page,/real-free-agents.yml/);
