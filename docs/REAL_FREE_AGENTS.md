@@ -54,3 +54,12 @@ Use the *manual workflow* first: the n8n example assumes that you have already v
 - Free-tier account confirmation is a checkbox, not billing verification. Never enable billing as a fallback.
 - All proposed changes require human PR review. No automatic merge or deployment.
 - Manual workflow dispatch becomes available only once the stacked PRs have reached default branch `main`.
+
+## Additional safety and deployment gates (v0.5)
+
+- The n8n dispatch workflow now returns HTTP 400 for missing free-tier confirmation, unsafe target paths, or invalid tasks. A `202` is returned **only after GitHub accepts** the dispatch; it is never proof that an AI edited anything. Keep the webhook disabled until Header Auth is configured.
+- The coding adapter verifies the **exact** allowlisted route including the credential variable, not just its provider and model name. This prevents a custom route from directing an unrelated secret to a provider.
+- The proposed edit is applied to the exact verified file inode using `O_NOFOLLOW`, with its contents rechecked on that open file descriptor. This closes a meaningful last-moment symlink replacement gap; it does not make execution inside a public untrusted repository safe.
+- In GitHub repository **Settings → Actions → General → Workflow permissions**, GitHub may require the owner to enable **Allow GitHub Actions to create and approve pull requests** before the draft PR publishing job can succeed. Grant only the necessary workflow permissions and never enable automatic merging.
+- On new personal-account repositories that option is disabled by default. A passing unit-test run does not check this GitHub setting.
+- No live inference was run during these tests. The GitHub Actions workflow must exist on the default branch and user-owned zero-billing keys must be set before a live run.
