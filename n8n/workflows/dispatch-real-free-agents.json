@@ -1,0 +1,105 @@
+{
+  "name": "Dispatch a bounded free AI coding task to GitHub Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "swarm-free-coding",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f1d46a4f-3539-4eed-b99e-bd7e41d15ba1",
+      "name": "Private Task Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        260
+      ],
+      "webhookId": "d8e8490b-1644-4c8b-a7f4-d31e0438394d"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.github.com/repos/ahpa5246-lgtm/Free-Agent-Swarm/actions/workflows/real-free-agents.yml/dispatches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/vnd.github+json"
+            },
+            {
+              "name": "X-GitHub-Api-Version",
+              "value": "2022-11-28"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ref: \"main\", inputs: { task: $json.body.task, target_path: $json.body.target_path, confirm_free_tier: $json.body.confirm_free_tier === true } }) }}",
+        "options": {
+          "timeout": 12000
+        }
+      },
+      "id": "3bf32799-00c5-45c7-a295-2e4d37d23f80",
+      "name": "Dispatch to Free GitHub Runner",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        450,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"accepted\":true,\"execution\":\"GitHub Actions workflow_dispatch\",\"notice\":\"Not a completed coding task: check the workflow run and draft PR.\"}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "72cfb824-86e1-4cf8-8fed-c73e93f3ade4",
+      "name": "Return Accepted, Not Completed",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        700,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Private Task Webhook": {
+      "main": [
+        [
+          {
+            "node": "Dispatch to Free GitHub Runner",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dispatch to Free GitHub Runner": {
+      "main": [
+        [
+          {
+            "node": "Return Accepted, Not Completed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "tags": [],
+  "pinData": {}
+}
