@@ -40,8 +40,17 @@ Use the *manual workflow* first: the n8n example assumes that you have already v
 
 ## Security and limitations
 
-- Model output is untrusted. All edits are restricted to the specified existing source/docs/test file; symlinks/traversal and unexpected paths are rejected; concurrent file changes are detected via SHA-256.
-- The workflow checks out without persisting a write token. Only the final publishing step receives a write token; secrets are never present during `npm run check`.
+- Model output is untrusted. All edits are restricted to the specified existing source/docs file; symlinked files, symlinked parent directories, hidden segments, traversal and unexpected paths are rejected; concurrent file changes are detected via SHA-256.
+- The runner separates `generate` (read-only with provider keys), `validate` (read-only, no API keys), and `publish` (write token; **does not execute generated code**) jobs. Patch artifacts cross jobs only after strict scope checking. This is not a public multi-tenant security sandbox.
 - The test/build process executes modified code. CI is still not a hardened sandbox; enable network isolation or a dedicated restricted runner for **untrusted** codebases before exposing the product to arbitrary users. Only authorized repository maintainers should dispatch this workflow.
 - Model-generated code is not automatically correct even when tests pass. Draft PR review is mandatory. No production auto-merge or deploy.
 - This does **not** yet allow multiple agents to edit the same repository asynchronously in long, independent sessions; it handles bounded single-file tasks and free-provider failover. Durable cross-run task orchestration and a public multi-user backend are later milestones.
+
+## Hardening review: release blockers (2026-10-30)
+
+- Provider calls were tested with HTTP mocks. No live API model has been confirmed with credentials.
+- Generated code is still tested on a networked GitHub runner: before public multi-user access, require a separate no-secrets, network-isolated sandbox.
+- The product exposes four API routes across three providers, NOT six coordinated autonomous agents. Two Groq routes share a quota pool.
+- Free-tier account confirmation is a checkbox, not billing verification. Never enable billing as a fallback.
+- All proposed changes require human PR review. No automatic merge or deployment.
+- Manual workflow dispatch becomes available only once the stacked PRs have reached default branch `main`.

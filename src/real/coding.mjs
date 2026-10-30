@@ -1,15 +1,15 @@
 import { createHash } from 'node:crypto';
-import { lstat, readFile, realpath, writeFile, mkdir } from 'node:fs/promises';
-import { dirname, resolve, relative, isAbsolute, sep } from 'node:path';
-import { failoverFree, FREE_ROUTES, ProviderFailure, requestFreeModel } from './providers.mjs';
+import { lstat, readFile, realpath, writeFile } from 'node:fs/promises';
+import { resolve, relative, isAbsolute, sep } from 'node:path';
+import { FREE_ROUTES, ProviderFailure, requestFreeModel } from './providers.mjs';
 
 export const MAX_FILE_BYTES = 18000;
 const SAFE_EXT = /\.(?:mjs|js|ts|tsx|css|html|md|json|svg)$/i;
-const SAFE_PREFIX = /^(?:src|tests|docs)\/[a-zA-Z0-9/_\-.]+$/;
+const SAFE_PREFIX = /^(?:src|docs)\/[a-zA-Z0-9/_\-.]+$/;
 const SAFE_ROOT_FILES = new Set(['index.html']);
 
 export function validateTargetPath(path) {
-  if (typeof path !== 'string' || path.length > 180 || path.includes('\\') || path.includes('//') || path.split('/').includes('..') || path.includes('\0') || isAbsolute(path)) throw new Error('Unsafe target path');
+  if (typeof path !== 'string' || path.length > 180 || path.includes('\\') || path.includes('//') || path.split('/').some(part => !part || part.startsWith('.')) || path.includes('\0') || isAbsolute(path)) throw new Error('Unsafe target path');
   if ((!SAFE_PREFIX.test(path) && !SAFE_ROOT_FILES.has(path)) || !SAFE_EXT.test(path) || path.startsWith('src/real/')) throw new Error('Target must be an existing code/documentation file in the edit allowlist');
   return path;
 }
@@ -20,6 +20,21 @@ export async function readTarget(root, path) {
   const target = resolve(rootReal, path);
   const rel = relative(rootReal, target);
   if (rel.startsWith('..' + sep) || rel === '..' || isAbsolute(rel)) throw new Error('Unsafe resolved path');
+  // A leaf-only lstat does not detect symlinked parent directories.
+  let current = rootReal;
+  const parts = path.split('/');
+  for (const [index, part] of parts.entries()) {
+    current = resolve(current, part);
+    const entry = await lstat(current);
+    if (entry.isSymbolicLink() || (index < parts.length - 1 && !entry.isDirectory())) {
+      throw new Error('Symlink or invalid parent directory in target path');
+    }
+  }
+  const actual = await realpath(target);
+  const actualRel = relative(rootReal, actual);
+  if (actualRel === '..' || actualRel.startsWith('..' + sep) || isAbsolute(actualRel)) {
+    throw new Error('Target resolves outside repository');
+  }
   const st = await lstat(target);
   if (!st.isFile() || st.isSymbolicLink() || st.size > MAX_FILE_BYTES) throw new Error('Only existing, ordinary, small files can be edited');
   const content = await readFile(target, 'utf8');
@@ -66,7 +81,10 @@ export async function codeOneFile({ root, targetPath, task, env = process.env, f
       if (proposal.content === snapshot.content) throw new Error('No actual code change proposed');
       // Fail closed if another process changed the target while model was thinking.
       if (digest((await readTarget(root, targetPath)).content) !== snapshot.sha256) throw new Error('Concurrent file modification detected; refusing overwrite');
-      if (!dryRun) await writeFile(snapshot.target, proposal.content, { flag: 'w' });
+      if (!dryRun) {
+        await readTarget(root, targetPath);
+        await writeFile(snapshot.target, proposal.content, { flag: 'w' });
+      }
       attempts.push({ route: result.route, state: 'success' });
       return { status: dryRun ? 'proposed' : 'edited', targetPath, agent: result.route, model: result.model, summary: proposal.summary, oldSha: snapshot.sha256, newSha: digest(proposal.content), attempts };
     } catch (err) {
