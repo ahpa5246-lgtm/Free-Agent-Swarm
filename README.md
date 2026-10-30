@@ -66,3 +66,7 @@ The owner selected Neo-Brutalism. See [design decisions, provenance and license 
 The offline PWA demo is deliberately separate from the **real, free-tier-only provider runner**. For bounded coding changes on this repository, see [real free agents setup](docs/REAL_FREE_AGENTS.md) and the manual [GitHub Actions workflow](.github/workflows/real-free-agents.yml). Three independent provider APIs (Groq, Gemini, OpenRouter) offer four allowlisted routes with rate-limit-aware failover; at least one free API key is required. The runner edits one scoped existing file, executes the project tests, and proposes a draft PR for human review. **No model API was called or connected automatically by adding this source code.**
 
 Optional n8n integration: [`dispatch-real-free-agents.json`](n8n/workflows/dispatch-real-free-agents.json) (private webhook -> GitHub Actions, disabled by default). **Do not place provider keys in the website or repository.**
+
+### Security audit status
+
+The free-tier coding runner is **not a public multi-tenant service**. Generation and testing have read-only permissions; a separate publisher has a write token but never executes generated code. See [release blockers](docs/REAL_FREE_AGENTS.md#hardening-review-release-blockers-2026-10-30).

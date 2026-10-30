@@ -52,15 +52,26 @@ test('non-free model route is refused before any HTTP call', async () => {
 });
 
 test('reject path traversal, sensitive directories, and unexpected code paths', () => {
-  for(const path of ['../.env','.github/workflows/ci.yml','src/real/providers.mjs','src/../../package.json','foo.js','/src/main.mjs','src\\foo.js','src//main.mjs'])
+  for(const path of ['../.env','src/.credentials.json','src/./fixture.mjs','tests/engine.test.mjs','.github/workflows/ci.yml','src/real/providers.mjs','src/../../package.json','foo.js','/src/main.mjs','src\\foo.js','src//main.mjs'])
     assert.throws(()=>validateTargetPath(path));
   assert.equal(validateTargetPath('src/fixture.mjs'),'src/fixture.mjs');
 });
 
 test('reject symbolic links outside repository', async () => {
   const root=await temp();
-  try { await symlink('/etc/passwd',resolve(root,'src/passwd.js')); await assert.rejects(()=>readTarget(root,'src/passwd.js'),/ordinary/); }
+  try { await symlink('/etc/passwd',resolve(root,'src/passwd.js')); await assert.rejects(()=>readTarget(root,'src/passwd.js'),/Symlink|ordinary/); }
   finally { await rm(root,{recursive:true,force:true}); }
+});
+
+test('reject a symlinked parent directory before reading or writing', async () => {
+  const root=await temp(), outside=await mkdtemp(resolve(tmpdir(),'swarm-outside-'));
+  try {
+    await writeFile(resolve(outside,'private.mjs'),'export const hidden = true;\n');
+    await symlink(outside,resolve(root,'src','shortcut'));
+    await assert.rejects(()=>readTarget(root,'src/shortcut/private.mjs'),/Symlink/);
+    await assert.rejects(()=>codeOneFile({root,targetPath:'src/shortcut/private.mjs',task:'overwrite',env,fetchImpl:async()=>chat(answer('src/shortcut/private.mjs'))}),/Symlink/);
+    assert.equal(await readFile(resolve(outside,'private.mjs'),'utf8'),'export const hidden = true;\n');
+  } finally {await rm(root,{recursive:true,force:true}); await rm(outside,{recursive:true,force:true});}
 });
 
 test('invalid JSON or unexpected file path cannot modify source', async () => {

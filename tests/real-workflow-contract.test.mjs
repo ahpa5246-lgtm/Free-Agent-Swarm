@@ -4,17 +4,30 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const read = p => readFileSync(resolve(import.meta.dirname,'..',p),'utf8');
 
-test('live GitHub workflow is manual, gated, bounded, no auto-merge',()=>{
+test('separate read-only generation and validation from privileged publishing',()=>{
   const s=read('.github/workflows/real-free-agents.yml');
   assert.match(s,/workflow_dispatch:/);
   assert.doesNotMatch(s,/^  schedule:/m);
   assert.match(s,/confirm_free_tier/);
-  assert.match(s,/persist-credentials: false/);
-  assert.match(s,/timeout-minutes: 10/);
+  assert.match(s,/github.ref == 'refs\/heads\/main'/);
+  assert.match(s,/permissions:\n  contents: read/);
+  assert.match(s,/  generate:\n/);
+  assert.match(s,/  validate:\n/);
+  assert.match(s,/  publish:\n/);
+  assert.match(s,/needs: \[generate, validate\]/);
+  assert.match(s,/  publish:[\s\S]*?permissions:\n      contents: write\n      pull-requests: write/);
+  assert.match(s,/  validate:[\s\S]*?permissions:\n      contents: read/);
+  assert.match(s,/git apply --check/);
+  assert.match(s,/git diff --cached --name-only/);
+  assert.match(s,/gh auth setup-git/);
+  assert.equal((s.match(/include-hidden-files: true/g)||[]).length,2);
   assert.match(s,/gh pr create --draft/);
-  assert.doesNotMatch(s,/gh pr merge|auto.?merge/);
+  assert.doesNotMatch(s,/x-access-token:|gh pr merge|auto.?merge/);
+  const validate=s.split('  validate:\n')[1].split('  publish:\n')[0];
+  assert.doesNotMatch(validate,/GROQ_API_KEY|OPENROUTER_API_KEY|GEMINI_API_KEY|GH_TOKEN|secrets\./);
+  const publish=s.split('  publish:\n')[1];
+  assert.doesNotMatch(publish,/npm run|node scripts\/real-agent-runner|GROQ_API_KEY/);
 });
-
 test('n8n real dispatch is disabled and authenticated before execution',()=>{
   const wf=JSON.parse(read('n8n/workflows/dispatch-real-free-agents.json'));
   assert.equal(wf.active,false);

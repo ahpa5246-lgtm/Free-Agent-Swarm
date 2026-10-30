@@ -1,45 +1,39 @@
 name: Real free-tier coding agent (manual)
-
-# Run only after reviewing the workflow and enabling free-tier API secrets.
-# This workflow does not schedule work, buy tokens, merge or deploy.
 on:
   workflow_dispatch:
     inputs:
       target_path:
-        description: Existing file to edit (src/, tests/, docs/, or index.html)
+        description: Existing file (src/, docs/, or index.html; no test edits)
         required: true
         type: string
         default: src/engine.mjs
       task:
-        description: Narrow coding objective for this file (<=750 chars)
+        description: Narrow objective (max 750 chars)
         required: true
         type: string
       confirm_free_tier:
-        description: I verified ALL configured API accounts are on non-billable free tiers
+        description: I verified configured accounts cannot bill me
         required: true
         type: boolean
         default: false
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 concurrency:
   group: free-agent-swarm-${{ github.repository }}
   cancel-in-progress: false
 jobs:
-  bounded-code-change:
-    if: ${{ inputs.confirm_free_tier == true }}
+  generate:
+    if: ${{ inputs.confirm_free_tier == true && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
-      - name: Checkout selected source branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Node LTS
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Generate code edit using free APIs only
+      - name: Generate bounded edit using free APIs
         env:
           SWARM_CONFIRM_FREE_TIER: 'true'
           SWARM_TARGET_PATH: ${{ inputs.target_path }}
@@ -48,12 +42,76 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: node scripts/real-agent-runner.mjs
-      - name: Verify actual code changes
+      - name: Package only the target diff
+        env:
+          TARGET_PATH: ${{ inputs.target_path }}
         run: |
-          if git diff --quiet; then echo 'No code change detected'; exit 1; fi
-      - name: Apply quality gates
+          set -euo pipefail
+          git diff --quiet && { echo 'No source change'; exit 1; }
+          test "$(git diff --name-only)" = "$TARGET_PATH" || { echo 'Unexpected modified files'; exit 1; }
+          git diff --check
+          git diff --binary -- "$TARGET_PATH" > .swarm-reports/proposal.patch
+          test -s .swarm-reports/proposal.patch
+      - name: Hand off proposed patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: proposed-patch
+          path: .swarm-reports/proposal.patch
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+      - name: Preserve redacted receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-receipt
+          path: .swarm-reports/last-run.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+  validate:
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: proposed-patch
+          path: .swarm-reports
+      - name: Apply scoped patch
+        env:
+          TARGET_PATH: ${{ inputs.target_path }}
+        run: |
+          set -euo pipefail
+          git apply --check .swarm-reports/proposal.patch
+          git apply .swarm-reports/proposal.patch
+          test "$(git diff --name-only)" = "$TARGET_PATH" || { echo 'Unexpected patch scope'; exit 1; }
+      - name: Validate untrusted code without write token or provider keys
         run: npm run check
-      - name: Open human-review draft pull request
+  publish:
+    needs: [generate, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: proposed-patch
+          path: .swarm-reports
+      - name: Publish tested patch without executing generated code
         env:
           GH_TOKEN: ${{ github.token }}
           TARGET_PATH: ${{ inputs.target_path }}
@@ -62,19 +120,13 @@ jobs:
         run: |
           set -euo pipefail
           branch="swarm/real-free-${RUN_ID}"
+          git apply --check .swarm-reports/proposal.patch
+          git apply --index .swarm-reports/proposal.patch
+          test "$(git diff --cached --name-only)" = "$TARGET_PATH" || { echo 'Invalid staged scope'; exit 1; }
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git switch -c "$branch"
-          git add -- "$TARGET_PATH"
-          git diff --cached --quiet && { echo 'Target file has no changes'; exit 1; }
-          git commit -m "agent: bounded free-tier edit to ${TARGET_PATH}"
-          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${branch}"
-          gh pr create --draft --base "$BASE_REF" --head "$branch" --title "Agent proposal: ${TARGET_PATH}" --body "Generated by a user-initiated, free-tier-only model request. CI passed at creation time. Review the diff, provider provenance, and security before merging. No automatic deployment."
-      - name: Preserve redacted audit receipt
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: free-agent-receipt-${{ github.run_id }}
-          path: .swarm-reports/last-run.json
-          if-no-files-found: ignore
-          retention-days: 7
+          git commit -m "agent: review bounded change to ${TARGET_PATH}"
+          gh auth setup-git
+          git push origin "HEAD:refs/heads/${branch}"
+          gh pr create --draft --base "$BASE_REF" --head "$branch" --title "Agent proposal: ${TARGET_PATH}" --body "Free-tier-only model proposal. Generated and tested in read-only jobs. Published without running generated code in write job. Human review mandatory."
