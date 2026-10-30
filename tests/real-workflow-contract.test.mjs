@@ -20,6 +20,7 @@ test('separate read-only generation and validation from privileged publishing',(
   assert.match(s,/git apply --check/);
   assert.match(s,/git diff --cached --name-only/);
   assert.match(s,/gh auth setup-git/);
+  assert.equal((s.match(/include-hidden-files: true/g)||[]).length,2);
   assert.match(s,/gh pr create --draft/);
   assert.doesNotMatch(s,/x-access-token:|gh pr merge|auto.?merge/);
   const validate=s.split('  validate:\n')[1].split('  publish:\n')[0];

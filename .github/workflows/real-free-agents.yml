@@ -57,6 +57,7 @@ jobs:
         with:
           name: proposed-patch
           path: .swarm-reports/proposal.patch
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
       - name: Preserve redacted receipt
@@ -65,6 +66,7 @@ jobs:
         with:
           name: agent-receipt
           path: .swarm-reports/last-run.json
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
   validate:
